@@ -16,6 +16,9 @@ export const LoginLayoutComponent = Loadable(
 );
 
 export const Home = Loadable(lazy(() => import('./pages/Index/Home')));
+export const BigScreenDashboard = Loadable(
+  lazy(() => import('./pages/dashboard/BigScreenDashboard'))
+);
 
 export const CompanyDetail = Loadable(
   lazy(() => import('./pages/company/CompanyDetail'))
@@ -149,6 +152,11 @@ export const VerifyEmail = Loadable(
 export const routes = (
   <Routes>
     <Route path='*' element={<NotFound />} errorElement={<ErrorPage />} />
+    <Route
+      path='/dashboard/big-screen'
+      element={<BigScreenDashboard />}
+      errorElement={<ErrorPage />}
+    />
     <Route path='/' element={<LayoutComponent />} errorElement={<ErrorPage />}>
       <Route index element={<Home />} />,
       <Route path='home/' element={<Home />} />,
