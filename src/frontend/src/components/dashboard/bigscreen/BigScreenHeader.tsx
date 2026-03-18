@@ -3,7 +3,8 @@ import { Group, Stack, Text } from '@mantine/core';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 
-import { InvenTreeLogo } from '../../items/InvenTreeLogo';
+// import { InvenTreeLogo } from '../../items/InvenTreeLogo';
+import CMCCLogo from '/home/inventree/assets/images/logo/cmcc_logo_5G.png'; // 路径根据实际存放位置调整
 
 type WeatherState = {
   temperature?: number;
@@ -82,33 +83,59 @@ export function BigScreenHeader({ title }: Readonly<{ title: string }>) {
     const parts: string[] = [];
     if (typeof weather.temperature === 'number') parts.push(`${weather.temperature.toFixed(0)}°C`);
     if (typeof weather.windSpeed === 'number') parts.push(`${weather.windSpeed.toFixed(0)} m/s`);
-    return parts.length ? `${t`Weather`}: ${parts.join(' / ')}` : t`Weather: —`;
+    return parts.length ? `${parts.join(' / ')}` : t`Weather: —`;
   }, [weather]);
 
-  return (
+return (
     <div
       style={{
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr',
-        alignItems: 'center',
+        alignItems: 'center', // 关键：让子元素垂直居中
         gap: 16,
-        padding: '16px 24px 10px',
-        position: 'relative'
+        padding: '0px 24px 10px',
+        position: 'relative',
+        height: '60px', // 核心：固定标题栏高度（按需调整，比如80px）
+        boxSizing: 'border-box' // 关键：padding 计入高度，避免高度溢出
       }}
     >
       <Group gap={10} wrap='nowrap'>
-        <InvenTreeLogo />
-        <Stack gap={0}>
+         <img
+          src={CMCCLogo}
+          alt="中国移动 Logo"
+          style={{
+            height: '60px', // 控制Logo高度，与标题栏匹配
+            width: 'auto',
+            objectFit: 'contain'
+          }}
+        />
+        {/* <Stack gap={0}>
           <Text c='cyan.2' fw={800} fz='md' lh={1.1}>
-            {t`InvenTree`}
+            {"中国移动"}
           </Text>
           <Text c='gray.5' size='xs'>
-            {t`Operations`}
+            {"China Mobile"}
           </Text>
-        </Stack>
+        </Stack> */}
       </Group>
 
-      <Text c='cyan.3' fw={900} fz={22} style={{ letterSpacing: '0.04em', textAlign: 'center' }}>
+      <Text 
+        c='#06b6d4' 
+        fw={900}    
+        fz={42}     // 字体大小调大，标题栏高度仍不变
+        style={{ 
+          letterSpacing: '2px',        
+          textAlign: 'center',         
+          textShadow: '0 0 10px rgba(6, 182, 212, 0.4)',
+          fontFamily: 'Arial, sans-serif',
+          // 核心：固定行高 + 垂直居中，抵消字体大小影响
+          lineHeight: '1', // 行高设为1，避免文字占高度
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%' // 占满父容器高度，配合外层 alignItems: center 居中
+        }}
+      >
         {title}
       </Text>
 

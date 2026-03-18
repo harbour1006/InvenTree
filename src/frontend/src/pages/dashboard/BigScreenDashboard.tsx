@@ -38,6 +38,7 @@ import { useUserState } from '../../states/UserState';
 import { ModelInformationDict } from '@lib/enums/ModelInformation';
 import { ModelType } from '@lib/enums/ModelType';
 import { apiUrl } from '@lib/functions/Api';
+import CMCCLogo from '../../../../../../../assets/images/logo/cmcc_logo_5G.png'; // 路径根据实际存放位置调整
 
 function useDashboardCount(modelType: ModelType, params?: Record<string, any>) {
   const api = useApi();
@@ -488,7 +489,7 @@ export default function BigScreenDashboard() {
           ? 'ERR'
           : formatCount(businessOverviewTotals.purchaseOrders),
       color: 'cyan.2',
-      description: t`New purchase orders in selected range`
+      // description: t`New purchase orders in selected range`
     },
     {
       label: t`Sales created`,
@@ -498,7 +499,7 @@ export default function BigScreenDashboard() {
           ? 'ERR'
           : formatCount(businessOverviewTotals.salesOrders),
       color: 'blue.2',
-      description: t`New sales orders in selected range`
+      // description: t`New sales orders in selected range`
     },
     {
       label: t`Builds created`,
@@ -508,7 +509,7 @@ export default function BigScreenDashboard() {
           ? 'ERR'
           : formatCount(businessOverviewTotals.buildOrders),
       color: 'violet.2',
-      description: t`New build orders in selected range`
+      // description: t`New build orders in selected range`
     }
   ];
 
@@ -583,7 +584,7 @@ export default function BigScreenDashboard() {
                   overflow: 'hidden'
                 }}
               >
-                <BigScreenHeader title={t`InvenTree Operations Command Center`} />
+                <BigScreenHeader title={'库存管理系统IMS'} />
 
                 <BigScreenKpiRow items={kpiItems} />
 
@@ -651,14 +652,14 @@ export default function BigScreenDashboard() {
                               <Text c={card.color} fw={800} fz={22} mt={6} truncate>
                                 {card.value}
                               </Text>
-                              <Text c='gray.5' size='xs' mt={4} lineClamp={2}>
+                              {/* <Text c='gray.5' size='xs' mt={4} lineClamp={2}>
                                 {card.description}
-                              </Text>
+                              </Text> */}
                             </Box>
                           ))}
                         </Group>
 
-                        <Group justify='space-between' wrap='nowrap'>
+                        {/* <Group justify='space-between' wrap='nowrap'>
                           <Text c='gray.5' size='xs' truncate>
                             {t`Peak volume: ${formatCount(businessOverviewPeak)}`}
                           </Text>
@@ -669,7 +670,7 @@ export default function BigScreenDashboard() {
                                 ? t`Refreshing live data`
                                 : t`Live range aggregation`}
                           </Text>
-                        </Group>
+                        </Group> */}
                       </Stack>
                     </BigScreenPanel>
                   </Box>
@@ -870,7 +871,7 @@ export default function BigScreenDashboard() {
                             }
                           />
 
-                          <Stack gap={8} style={{ flex: 1, minWidth: 0 }}>
+                          <Stack gap={5} style={{ flex: 1, minWidth: 0 }}>
                             {riskSections.map((section) => {
                               const percent = totalRiskSegments > 0 ? (section.value / totalRiskSegments) * 100 : 0;
 

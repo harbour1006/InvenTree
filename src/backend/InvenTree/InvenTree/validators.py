@@ -21,6 +21,21 @@ def validate_physical_units(unit):
     if not unit:
         return
 
+    # --- 新增代码：允许包含中文字符的单位直接通过验证 ---
+    # 检查字符串中是否包含任何中文字符 (Unicode 范围 \u4e00-\u9fff)
+    import re
+    if re.search(r'[\u4e00-\u9fff]', unit):
+        return
+    # ----------------------------------------------
+
+    ureg = InvenTree.conversion.get_unit_registry()
+
+    try:
+        ureg(unit)
+    except (AssertionError, AttributeError, pint.errors.UndefinedUnitError):
+        # 如果不是中文，且 Pint 无法识别，才抛出错误
+        raise ValidationError(_('Invalid physical unit'))
+
     ureg = InvenTree.conversion.get_unit_registry()
 
     try:

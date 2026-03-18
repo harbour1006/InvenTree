@@ -19,6 +19,9 @@ import { api } from '../../App';
 import { vars } from '../../theme';
 import { Boundary } from '../Boundary';
 import { RenderInstance } from '../render/Instance';
+//临时禁用mfa增加
+import { Tooltip } from '@mantine/core';
+import { IconInfoCircle } from '@tabler/icons-react';
 
 /**
  * Render a single setting value
@@ -117,21 +120,34 @@ function SettingValue({
 
   switch (setting?.type || 'string') {
     case 'boolean':
+      const isDisabled = setting.read_only || setting.key === 'LOGIN_ENFORCE_MFA';    //临时禁用MFA开关，直到我们有更好的解决方案来处理强制启用MFA的情况
       return (
-        <Switch
-          size='sm'
-          radius='lg'
-          aria-label={`toggle-setting-${setting.key}`}
-          disabled={setting.read_only}
-          checked={setting.value.toString().toLowerCase() == 'true'}
-          onChange={toggleSetting}
-          wrapperProps={{
-            'aria-label': `setting-${setting.key}-wrapper`
-          }}
-          style={{
-            paddingRight: '20px'
-          }}
-        />
+        <Group gap="xs" align="center">
+
+          {/* 仅在禁用时显示提示图标 */}
+      {isDisabled && (
+        <Tooltip label="临时禁用此按钮" position="right" withArrow>
+          <IconInfoCircle size={18} color="gray" style={{ cursor: 'help' }} />
+        </Tooltip>
+      )}
+      {/* Switch 按钮 */}
+      <Switch
+        size='sm'
+        radius='lg'
+        aria-label={`toggle-setting-${setting.key}`}
+        disabled={isDisabled}
+        checked={setting.value.toString().toLowerCase() == 'true'}
+        onChange={toggleSetting}
+        wrapperProps={{
+          'aria-label': `setting-${setting.key}-wrapper`
+        }}
+        style={{
+          paddingRight: '20px'
+        }}
+      />
+
+      
+    </Group>
       );
     default:
       return valueText ? (
