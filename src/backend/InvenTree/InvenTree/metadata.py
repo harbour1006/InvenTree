@@ -5,7 +5,7 @@ from django.http import Http404
 from django.urls import reverse
 
 import structlog
-from rest_framework import exceptions, serializers
+from rest_framework import exceptions, permissions, serializers
 from rest_framework.fields import empty
 from rest_framework.metadata import SimpleMetadata
 from rest_framework.request import clone_request
@@ -23,7 +23,7 @@ logger = structlog.get_logger('inventree')
 class InvenTreeMetadata(SimpleMetadata):
     """Custom metadata class for the DRF API.
 
-    This custom metadata class imits the available "actions",
+    This custom metadata class limits the available "actions",
     based on the user's role permissions.
 
     Thus when a client send an OPTIONS request to an API endpoint,
@@ -50,6 +50,10 @@ class InvenTreeMetadata(SimpleMetadata):
 
         for method in {'PUT', 'POST', 'GET'} & set(view.allowed_methods):
             view.request = clone_request(request, method)
+
+            # Mark this request, to prevent expensive prefetching
+            view.request._metadata_requested = True
+
             try:
                 # Test global permissions
                 if hasattr(view, 'check_permissions'):
@@ -127,9 +131,25 @@ class InvenTreeMetadata(SimpleMetadata):
 
             # Remove any HTTP methods that the user does not have permission for
             for method, permission in rolemap.items():
+                # general model / role permission
                 result = check_user_permission(user, self.model, permission) or (
                     role_required and check_user_role(user, role_required, permission)
                 )
+
+                # check if simple IsAuthenticated permission class is used
+                if not result:
+                    result = (
+                        view.permission_classes
+                        and len(view.permission_classes) == 1
+                        and any(
+                            perm
+                            in [
+                                permissions.IsAuthenticated,
+                                InvenTree.permissions.IsAuthenticatedOrReadScope,
+                            ]
+                            for perm in view.permission_classes
+                        )
+                    )
 
                 if method in actions and not result:
                     del actions[method]

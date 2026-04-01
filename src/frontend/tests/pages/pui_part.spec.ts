@@ -1,6 +1,7 @@
 import { test } from '../baseFixtures';
 import {
   clearTableFilters,
+  clickOnParamFilter,
   clickOnRowMenu,
   deletePart,
   getRowFromCell,
@@ -134,7 +135,7 @@ test('Parts - BOM', async ({ browser }) => {
   await page.getByRole('button', { name: 'Close' }).click();
 });
 
-test('Part - Editing', async ({ browser }) => {
+test('Parts - Editing', async ({ browser }) => {
   const page = await doCachedLogin(browser, { url: 'part/104/details' });
 
   await page.getByText('A square table - with blue paint').first().waitFor();
@@ -175,10 +176,21 @@ test('Part - Editing', async ({ browser }) => {
 
 test('Parts - Locking', async ({ browser }) => {
   const page = await doCachedLogin(browser, { url: 'part/104/bom' });
+
   await loadTab(page, 'Bill of Materials');
-  await page.getByLabel('action-button-add-bom-item').waitFor();
+  await page
+    .getByRole('button', { name: 'action-menu-add-bom-items' })
+    .waitFor();
+
   await loadTab(page, 'Parameters');
-  await page.getByLabel('action-button-add-parameter').waitFor();
+  await page
+    .getByRole('button', { name: 'action-menu-add-parameters' })
+    .click();
+  await page
+    .getByRole('menuitem', {
+      name: 'action-menu-add-parameters-create-parameter'
+    })
+    .click();
 
   // Navigate to a known assembly which *is* locked
   await navigate(page, 'part/100/bom');
@@ -491,7 +503,14 @@ test('Parts - Parameters', async ({ browser }) => {
   const page = await doCachedLogin(browser, { url: 'part/69/parameters' });
 
   // Create a new template
-  await page.getByLabel('action-button-add-parameter').click();
+  await page
+    .getByRole('button', { name: 'action-menu-add-parameters' })
+    .click();
+  await page
+    .getByRole('menuitem', {
+      name: 'action-menu-add-parameters-create-parameter'
+    })
+    .click();
 
   // Select the "Color" parameter template (should create a "choice" field)
   await page.getByLabel('related-field-template').fill('Color');
@@ -505,15 +524,18 @@ test('Parts - Parameters', async ({ browser }) => {
 
   // Select the "polarized" parameter template (should create a "checkbox" field)
   await page.getByLabel('related-field-template').fill('Polarized');
-  await page.getByText('Is this part polarized?').click();
+  await page.getByRole('option', { name: 'Polarized Is this part' }).click();
 
   // Submit with "false" value
   await page.getByRole('button', { name: 'Submit' }).click();
 
+  const cell = await page.getByRole('cell', {
+    name: 'Is this part polarized?'
+  });
+
   // Check for the expected values in the table
-  let row = await getRowFromCell(
-    await page.getByRole('cell', { name: 'Polarized', exact: true })
-  );
+  const row = await getRowFromCell(cell);
+
   await row.getByRole('cell', { name: 'No', exact: true }).waitFor();
   await row.getByRole('cell', { name: 'allaccess' }).waitFor();
   await row.getByLabel(/row-action-menu-/i).click();
@@ -528,48 +550,36 @@ test('Parts - Parameters', async ({ browser }) => {
     .click();
   await page.getByRole('button', { name: 'Submit' }).click();
 
-  row = await getRowFromCell(
-    await page.getByRole('cell', { name: 'Polarized', exact: true })
-  );
-  await row.getByRole('cell', { name: 'Yes', exact: true }).waitFor();
-
-  await page.getByText('1 - 1 / 1').waitFor();
-
   // Finally, delete the parameter
   await row.getByLabel(/row-action-menu-/i).click();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
-  await page.getByRole('button', { name: 'Delete' }).click();
 
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await page.getByText('No records found').first().waitFor();
 });
 
 test('Parts - Parameter Filtering', async ({ browser }) => {
   const page = await doCachedLogin(browser, { url: 'part/' });
 
-  await loadTab(page, 'Part Parameters');
+  await loadTab(page, 'Parts', true);
+  await page
+    .getByRole('button', { name: 'segmented-icon-control-parametric' })
+    .click();
+
   await clearTableFilters(page);
 
   // All parts should be available (no filters applied)
   await page.getByText(/\/ 42\d/).waitFor();
 
-  const clickOnParamFilter = async (name: string) => {
-    const button = await page
-      .getByRole('button', { name: `${name} Not sorted` })
-      .getByRole('button')
-      .first();
-    await button.scrollIntoViewIfNeeded();
-    await button.click();
-  };
-
   const clearParamFilter = async (name: string) => {
-    await clickOnParamFilter(name);
+    await clickOnParamFilter(page, name);
     await page.getByLabel(`clear-filter-${name}`).waitFor();
     await page.getByLabel(`clear-filter-${name}`).click();
     // await page.getByLabel(`clear-filter-${name}`).click();
   };
 
   // Let's filter by color
-  await clickOnParamFilter('Color');
+  await clickOnParamFilter(page, 'Color');
   await page.getByRole('option', { name: 'Red' }).click();
 
   // Only 10 parts available

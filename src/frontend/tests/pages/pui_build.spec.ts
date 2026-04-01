@@ -11,6 +11,26 @@ import {
 } from '../helpers.ts';
 import { doCachedLogin } from '../login.ts';
 
+test('Build - Index', async ({ browser }) => {
+  const page = await doCachedLogin(browser, { url: 'manufacturing/index/' });
+
+  await loadTab(page, 'Build Orders');
+
+  // Ensure all data views are available
+  await page
+    .getByRole('button', { name: 'segmented-icon-control-parametric' })
+    .click();
+
+  await page
+    .getByRole('button', { name: 'segmented-icon-control-calendar' })
+    .click();
+  await page.getByRole('button', { name: 'action-button-next-month' }).click();
+
+  await page
+    .getByRole('button', { name: 'segmented-icon-control-table' })
+    .click();
+});
+
 test('Build Order - Basic Tests', async ({ browser }) => {
   const page = await doCachedLogin(browser);
 
@@ -253,7 +273,7 @@ test('Build Order - Build Outputs', async ({ browser }) => {
 
   // Accept the suggested batch code
   await page
-    .getByRole('img', { name: 'text-field-batch_code-accept-placeholder' })
+    .getByRole('img', { name: 'field-batch_code-accept-placeholder' })
     .click();
 
   await page.getByLabel('related-field-location').click();

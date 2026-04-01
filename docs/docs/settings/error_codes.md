@@ -83,6 +83,24 @@ This is a security measure to prevent plugins from changing the core functionali
 
 An error occurred when discovering or initializing a machine type from a plugin. This likely indicates a faulty or incompatible plugin.
 
+#### INVE-E13
+
+**Error reading InvenTree configuration file**
+
+An error occurred while reading the InvenTree configuration file. This might be caused by a syntax error or invalid value in the configuration file.
+
+#### INVE-E14
+
+**Could not import Django**
+
+Django is not installed in the current Python environment. This means that the InvenTree backend is not running within the correct [python virtual environment](../start/index.md#virtual-environment) or that the required Python packages were not installed correctly.
+
+#### INVE-E15
+
+**Python version not supported**
+
+This error occurs attempting to run InvenTree on a version of Python which is older than the minimum required version. We [require Python {{ config.extra.min_python_version }} or newer](../start/index.md#python-requirements)
+
 ### INVE-W (InvenTree Warning)
 Warnings - These are non-critical errors which should be addressed when possible.
 
@@ -153,7 +171,7 @@ The warning text will show the recommended command for intended use.
 #### INVE-W10
 **Config not in recommended directory - Backend**
 
-A configuration file is not in the recommended directory. This might lead to issues with the deployment method you are using. It might also lead to confusinon.
+A configuration file is not in the recommended directory. This might lead to issues with the deployment method you are using. It might also lead to confusion.
 
 The warning text will show the recommended directory for your deployment method.
 
@@ -173,6 +191,13 @@ Therefore the registration user interface elements will not be shown.
 
 
 To enable registration, the email settings must be configured correctly. See  [email configuration](../start/config.md#email-settings).
+
+#### INVE-W12
+**Signup attempt blocked because registration is disabled - Backend**
+
+A user attempted to sign up but registration is currently disabled via the system settings. This is to prevent unauthorized or unwanted user registrations.
+
+To enable registration, adjust the relevant settings (for regular or SSO registration) to allow user signups.
 
 ### INVE-I (InvenTree Information)
 Information — These are not errors but information messages. They might point out potential issues or just provide information.

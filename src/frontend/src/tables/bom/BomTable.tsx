@@ -1,19 +1,3 @@
-import { t } from '@lingui/core/macro';
-import { ActionIcon, Alert, Group, Stack, Text, Tooltip } from '@mantine/core';
-import { showNotification } from '@mantine/notifications';
-import {
-  IconArrowRight,
-  IconCircleCheck,
-  IconExclamationCircle,
-  IconFileArrowLeft,
-  IconLock,
-  IconSwitch3
-} from '@tabler/icons-react';
-import { type ReactNode, useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-
-import { ActionButton } from '@lib/components/ActionButton';
-import { AddItemButton } from '@lib/components/AddItemButton';
 import {
   type RowAction,
   RowDeleteAction,
@@ -27,8 +11,23 @@ import { apiUrl } from '@lib/functions/Api';
 import { navigateToLink } from '@lib/functions/Navigation';
 import type { TableFilter } from '@lib/types/Filters';
 import type { TableColumn } from '@lib/types/Tables';
+import { t } from '@lingui/core/macro';
+import { ActionIcon, Alert, Group, Stack, Text, Tooltip } from '@mantine/core';
+import { showNotification } from '@mantine/notifications';
+import {
+  IconArrowRight,
+  IconCircleCheck,
+  IconExclamationCircle,
+  IconFileUpload,
+  IconLock,
+  IconPlus,
+  IconSwitch3
+} from '@tabler/icons-react';
+import { type ReactNode, useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Thumbnail } from '../../components/images/Thumbnail';
 import ImporterDrawer from '../../components/importer/ImporterDrawer';
+import { ActionDropdown } from '../../components/items/ActionDropdown';
 import { RenderPart } from '../../components/render/Part';
 import { useApi } from '../../contexts/ApiContext';
 import { formatDecimal, formatPriceRange } from '../../defaults/formatters';
@@ -43,6 +42,7 @@ import { useTable } from '../../hooks/UseTable';
 import { useUserState } from '../../states/UserState';
 import {
   BooleanColumn,
+  CategoryColumn,
   DescriptionColumn,
   NoteColumn,
   ReferenceColumn
@@ -132,8 +132,16 @@ export function BomTable({
       {
         accessor: 'sub_part_detail.IPN',
         title: t`IPN`,
-        sortable: true
+        sortable: true,
+        ordering: 'IPN'
       },
+      CategoryColumn({
+        accessor: 'category_detail',
+        defaultVisible: false,
+        switchable: true,
+        sortable: true,
+        ordering: 'category'
+      }),
       DescriptionColumn({
         accessor: 'sub_part_detail.description'
       }),
@@ -418,6 +426,11 @@ export function BomTable({
         description: t`Show trackable items`
       },
       {
+        name: 'sub_part_active',
+        label: t`Active Part`,
+        description: t`Show active items`
+      },
+      {
         name: 'sub_part_assembly',
         label: t`Assembled Part`,
         description: t`Show assembled items`
@@ -498,7 +511,7 @@ export function BomTable({
   const newBomItem = useCreateApiFormModal({
     url: ApiEndpoints.bom_list,
     title: t`Add BOM Item`,
-    fields: bomItemFields(),
+    fields: bomItemFields({}),
     initialData: {
       part: partId
     },
@@ -510,7 +523,7 @@ export function BomTable({
     url: ApiEndpoints.bom_list,
     pk: selectedBomItem.pk,
     title: t`Edit BOM Item`,
-    fields: bomItemFields(),
+    fields: bomItemFields({}),
     successMessage: t`BOM item updated`,
     table: table
   });
@@ -613,18 +626,26 @@ export function BomTable({
 
   const tableActions = useMemo(() => {
     return [
-      <ActionButton
-        key='import-bom'
+      <ActionDropdown
+        key='add-bom-actions'
+        tooltip={t`Add BOM Items`}
+        position='bottom-start'
+        icon={<IconPlus />}
         hidden={partLocked || !user.hasAddRole(UserRoles.part)}
-        tooltip={t`Import BOM Data`}
-        icon={<IconFileArrowLeft />}
-        onClick={() => importBomItem.open()}
-      />,
-      <AddItemButton
-        key='add-bom-item'
-        hidden={partLocked || !user.hasAddRole(UserRoles.part)}
-        tooltip={t`Add BOM Item`}
-        onClick={() => newBomItem.open()}
+        actions={[
+          {
+            name: t`Add BOM Item`,
+            icon: <IconPlus />,
+            tooltip: t`Add a single BOM item`,
+            onClick: () => newBomItem.open()
+          },
+          {
+            name: t`Import from File`,
+            icon: <IconFileUpload />,
+            tooltip: t`Import BOM items from a file`,
+            onClick: () => importBomItem.open()
+          }
+        ]}
       />
     ];
   }, [partLocked, user]);
@@ -655,8 +676,10 @@ export function BomTable({
             params: {
               ...params,
               part: partId,
+              substitutes: true,
               part_detail: true,
-              sub_part_detail: true
+              sub_part_detail: true,
+              category_detail: true
             },
             tableActions: tableActions,
             tableFilters: tableFilters,

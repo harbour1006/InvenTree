@@ -1,3 +1,4 @@
+import { t } from '@lingui/core/macro';
 import {
   Button,
   Group,
@@ -6,6 +7,7 @@ import {
   Stack,
   Switch,
   Text,
+  Tooltip,
   useMantineColorScheme
 } from '@mantine/core';
 import { IconEdit } from '@tabler/icons-react';
@@ -23,6 +25,24 @@ import { RenderInstance } from '../render/Instance';
 import { Tooltip } from '@mantine/core';
 import { IconInfoCircle } from '@tabler/icons-react';
 
+type ConfirmResult = {
+  requires_confirmation: boolean;
+  confirmed: boolean;
+  proceed?: boolean;
+};
+function confirmSettingChange(setting: Setting): ConfirmResult {
+  if (setting.confirm) {
+    const confirmed = window.confirm(
+      setting.confirm_text || t`Do you want to proceed to change this setting?`
+    );
+    return {
+      requires_confirmation: true,
+      confirmed: confirmed || false,
+      proceed: confirmed
+    };
+  }
+  return { requires_confirmation: false, confirmed: false, proceed: true };
+}
 /**
  * Render a single setting value
  */
@@ -32,8 +52,8 @@ function SettingValue({
   onToggle
 }: Readonly<{
   setting: Setting;
-  onEdit: (setting: Setting) => void;
-  onToggle: (setting: Setting, value: boolean) => void;
+  onEdit: (setting: Setting, confirmed: boolean) => void;
+  onToggle: (setting: Setting, value: boolean, confirmed: boolean) => void;
 }>) {
   // Determine the text to display for the setting value
   const valueText: string = useMemo(() => {
@@ -57,7 +77,9 @@ function SettingValue({
   // Launch the edit dialog for this setting
   const editSetting = useCallback(() => {
     if (!setting.read_only) {
-      onEdit(setting);
+      const confirm = confirmSettingChange(setting);
+      if (!confirm.proceed) return;
+      onEdit(setting, confirm.confirmed);
     }
   }, [setting, onEdit]);
 
@@ -65,7 +87,9 @@ function SettingValue({
   const toggleSetting = useCallback(
     (event: any) => {
       if (!setting.read_only) {
-        onToggle(setting, event.currentTarget.checked);
+        const confirm = confirmSettingChange(setting);
+        if (!confirm.proceed) return;
+        onToggle(setting, event.currentTarget.checked, confirm.confirmed);
       }
     },
     [setting, onToggle]
@@ -186,8 +210,8 @@ export function SettingItem({
 }: Readonly<{
   setting: Setting;
   shaded: boolean;
-  onEdit: (setting: Setting) => void;
-  onToggle: (setting: Setting, value: boolean) => void;
+  onEdit: (setting: Setting, confirmed: boolean) => void;
+  onToggle: (setting: Setting, value: boolean, confirmed: boolean) => void;
 }>) {
   const { colorScheme } = useMantineColorScheme();
 
@@ -208,7 +232,18 @@ export function SettingItem({
           <Text size='xs'>{setting.description}</Text>
         </Stack>
         <Boundary label={`setting-value-${setting.key}`}>
-          <SettingValue setting={setting} onEdit={onEdit} onToggle={onToggle} />
+          <Group gap='xs' justify='right'>
+            {setting.confirm && (
+              <Tooltip label={t`This setting requires confirmation`}>
+                <IconEdit color={vars.colors.yellow[7]} size={16} />
+              </Tooltip>
+            )}
+            <SettingValue
+              setting={setting}
+              onEdit={onEdit}
+              onToggle={onToggle}
+            />
+          </Group>
         </Boundary>
       </Group>
     </Paper>

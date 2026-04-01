@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Optional
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -101,21 +100,6 @@ class StockLocationType(InvenTree.models.MetadataMixin, models.Model):
     )
 
 
-class StockLocationManager(TreeManager):
-    """Custom database manager for the StockLocation class.
-
-    StockLocation querysets will automatically select related fields for performance.
-    """
-
-    def get_queryset(self):
-        """Prefetch queryset to optimize db hits.
-
-        - Joins the StockLocationType by default for speedier icon access
-        """
-        # return super().get_queryset().select_related("location_type")
-        return super().get_queryset()
-
-
 class StockLocationReportContext(report.mixins.BaseReportContext):
     """Report context for the StockLocation model.
 
@@ -129,13 +113,14 @@ class StockLocationReportContext(report.mixins.BaseReportContext):
 
     location: StockLocation
     qr_data: str
-    parent: Optional[StockLocation]
+    parent: StockLocation | None
     stock_location: StockLocation
     stock_items: report.mixins.QuerySet[StockItem]
 
 
 class StockLocation(
     InvenTree.models.PluginValidationMixin,
+    InvenTree.models.InvenTreeParameterMixin,
     InvenTree.models.InvenTreeBarcodeMixin,
     report.mixins.InvenTreeReportMixin,
     InvenTree.models.PathStringMixin,
@@ -152,7 +137,7 @@ class StockLocation(
 
     EXTRA_PATH_FIELDS = ['icon']
 
-    objects = StockLocationManager()
+    objects = TreeManager()
 
     class Meta:
         """Metaclass defines extra model properties."""
@@ -392,7 +377,7 @@ class StockItemReportContext(report.mixins.BaseReportContext):
     barcode_hash: str
     batch: str
     child_items: report.mixins.QuerySet[StockItem]
-    ipn: Optional[str]
+    ipn: str | None
     installed_items: set[StockItem]
     item: StockItem
     name: str
@@ -403,7 +388,7 @@ class StockItemReportContext(report.mixins.BaseReportContext):
     quantity: Decimal
     result_list: list[StockItemTestResult]
     results: dict[str, StockItemTestResult]
-    serial: Optional[str]
+    serial: str | None
     stock_item: StockItem
     tests: dict[str, StockItemTestResult]
     test_keys: list[str]
@@ -533,12 +518,14 @@ class StockItem(
         status__in=StockStatusGroups.AVAILABLE_CODES,
     )
 
-    # A query filter which can be used to filter StockItem objects which have expired
-    EXPIRED_FILTER = (
-        IN_STOCK_FILTER
-        & ~Q(expiry_date=None)
-        & Q(expiry_date__lt=InvenTree.helpers.current_date())
-    )
+    @classmethod
+    def get_expired_filter(cls):
+        """A query filter which can be used to filter StockItem objects which have expired."""
+        return (
+            cls.IN_STOCK_FILTER
+            & ~Q(expiry_date=None)
+            & Q(expiry_date__lt=InvenTree.helpers.current_date())
+        )
 
     @classmethod
     def _create_serial_numbers(cls, serials: list, **kwargs) -> QuerySet:
@@ -667,7 +654,7 @@ class StockItem(
         return items
 
     @staticmethod
-    def convert_serial_to_int(serial: str) -> Optional[int]:
+    def convert_serial_to_int(serial: str) -> int | None:
         """Convert the provided serial number to an integer value.
 
         This function hooks into the plugin system to allow for custom serial number conversion.
@@ -810,12 +797,28 @@ class StockItem(
 
             try:
                 old = StockItem.objects.get(pk=self.pk)
+                old_custom_status = old.get_custom_status()
+                custom_status = self.get_custom_status()
 
                 deltas = {}
 
                 # Status changed?
                 if old.status != self.status:
-                    deltas['status'] = self.status
+                    # Custom status changed?
+                    # Matches custom status tracking behavior of StockChangeStatusSerializer
+                    if old_custom_status != custom_status:
+                        deltas['status'] = custom_status
+                        deltas['status_logical'] = self.status
+                    else:
+                        deltas['status'] = self.status
+                        deltas['status_logical'] = self.status
+
+                    if old_custom_status:
+                        deltas['old_status'] = old_custom_status
+                        deltas['old_status_logical'] = old.status
+                    else:
+                        deltas['old_status'] = old.status
+                        deltas['old_status_logical'] = old.status
 
                 if add_note and len(deltas) > 0:
                     self.add_tracking_entry(
@@ -1359,7 +1362,7 @@ class StockItem(
         item.save(add_note=False)
 
         code = StockHistoryCode.SENT_TO_CUSTOMER
-        deltas = {}
+        deltas = {'quantity': float(quantity)}
 
         if customer is not None:
             deltas['customer'] = customer.pk
@@ -1440,7 +1443,11 @@ class StockItem(
                 # Split the stock item
                 item = self.splitStock(quantity, None, user)
 
-        tracking_info = {}
+        tracking_info = {
+            'quantity': float(quantity)
+            if quantity is not None
+            else float(item.quantity)
+        }
 
         if location:
             tracking_info['location'] = location.pk
@@ -1461,8 +1468,17 @@ class StockItem(
 
         if status := kwargs.pop('status', None):
             if not item.compare_status(status):
+                old_custom_status = item.get_custom_status()
+                old_status_logical = item.status
                 item.set_status(status)
-                tracking_info['status'] = status
+                tracking_info['status'] = status  # may be a custom value
+                tracking_info['status_logical'] = (
+                    item.status
+                )  # always the logical value
+                tracking_info['old_status'] = (
+                    old_custom_status if old_custom_status else old_status_logical
+                )
+                tracking_info['old_status_logical'] = old_status_logical
 
         item.save()
 
@@ -1641,7 +1657,7 @@ class StockItem(
         stock_item.location = None
         stock_item.save(add_note=False)
 
-        deltas = {'stockitem': self.pk}
+        deltas = {'stockitem': self.pk, 'quantity': float(quantity)}
 
         if build is not None:
             deltas['buildorder'] = build.pk
@@ -1656,7 +1672,7 @@ class StockItem(
             StockHistoryCode.INSTALLED_CHILD_ITEM,
             user,
             notes=notes,
-            deltas={'stockitem': stock_item.pk},
+            deltas={'stockitem': stock_item.pk, 'quantity': float(quantity)},
         )
 
         trigger_event(
@@ -1682,11 +1698,14 @@ class StockItem(
         self.belongs_to.add_tracking_entry(
             StockHistoryCode.REMOVED_CHILD_ITEM,
             user,
-            deltas={'stockitem': self.pk},
+            deltas={'stockitem': self.pk, 'quantity': float(self.quantity)},
             notes=notes,
         )
 
-        tracking_info = {'stockitem': self.belongs_to.pk}
+        tracking_info = {
+            'stockitem': self.belongs_to.pk,
+            'quantity': float(self.quantity),
+        }
 
         self.add_tracking_entry(
             StockHistoryCode.REMOVED_FROM_ASSEMBLY,
@@ -1783,7 +1802,7 @@ class StockItem(
         self,
         entry_type: int,
         user: User,
-        deltas: Optional[dict] = None,
+        deltas: dict | None = None,
         notes: str = '',
         commit: bool = True,
         **kwargs,
@@ -1795,7 +1814,7 @@ class StockItem(
             user (User): The user performing this action
             deltas (dict, optional): A map of the changes made to the model. Defaults to None.
             notes (str, optional): URL associated with this tracking entry. Defaults to ''.
-            commit (boolm optional): If True, save the entry to the database. Defaults to True.
+            commit (bool, optional): If True, save the entry to the database. Defaults to True.
 
         Returns:
             StockItemTracking: The created tracking entry
@@ -1825,6 +1844,7 @@ class StockItem(
 
         entry = StockItemTracking(
             item=self,
+            part=self.part,
             tracking_type=entry_type.value,
             user=user,
             date=InvenTree.helpers.current_time(),
@@ -1842,9 +1862,9 @@ class StockItem(
         self,
         quantity: int,
         serials: list[str],
-        user: Optional[User] = None,
-        notes: Optional[str] = '',
-        location: Optional[StockLocation] = None,
+        user: User | None = None,
+        notes: str | None = '',
+        location: StockLocation | None = None,
     ):
         """Split this stock item into unique serial numbers.
 
@@ -1954,7 +1974,7 @@ class StockItem(
 
         # Remove the equivalent number of items
         self.take_stock(
-            quantity, user, code=StockHistoryCode.STOCK_SERIZALIZED, notes=notes
+            quantity, user, code=StockHistoryCode.STOCK_SERIALIZED, notes=notes
         )
 
         return items
@@ -1968,7 +1988,7 @@ class StockItem(
             item.save()
 
     @transaction.atomic
-    def copyTestResultsFrom(self, other: StockItem, filters: Optional[dict] = None):
+    def copyTestResultsFrom(self, other: StockItem, filters: dict | None = None):
         """Copy all test results from another StockItem."""
         # Set default - see B006
 
@@ -2165,7 +2185,10 @@ class StockItem(
             user,
             quantity=self.quantity,
             notes=notes,
-            deltas={'location': location.pk if location else None},
+            deltas={
+                'location': location.pk if location else None,
+                'quantity': self.quantity,
+            },
         )
 
         # Update the location of the item
@@ -2283,8 +2306,26 @@ class StockItem(
         # Optional fields which can be supplied in a 'move' call
         for field in StockItem.optional_transfer_fields():
             if field in kwargs:
-                setattr(new_stock, field, kwargs[field])
-                deltas[field] = kwargs[field]
+                # handle specific case for status deltas
+                if field == 'status':
+                    status = kwargs[field]
+                    if not new_stock.compare_status(status):
+                        old_custom_status = new_stock.get_custom_status()
+                        old_status_logical = new_stock.status
+                        new_stock.set_status(status)
+                        deltas['status'] = status  # may be a custom value
+                        deltas['status_logical'] = (
+                            new_stock.status
+                        )  # always the logical value
+                        deltas['old_status'] = (
+                            old_custom_status
+                            if old_custom_status
+                            else old_status_logical
+                        )
+                        deltas['old_status_logical'] = old_status_logical
+                else:
+                    setattr(new_stock, field, kwargs[field])
+                    deltas[field] = kwargs[field]
 
         new_stock.save(add_note=False)
 
@@ -2388,7 +2429,7 @@ class StockItem(
 
         self.location = location
 
-        tracking_info = {}
+        tracking_info = {'quantity': float(quantity)}
 
         tracking_code = StockHistoryCode.STOCK_MOVE
 
@@ -2400,8 +2441,15 @@ class StockItem(
         status = kwargs.pop('status', None) or kwargs.pop('status_custom_key', None)
 
         if status and not self.compare_status(status):
+            old_custom_status = self.get_custom_status()
+            old_status_logical = self.status
             self.set_status(status)
-            tracking_info['status'] = status
+            tracking_info['status'] = status  # may be a custom value
+            tracking_info['status_logical'] = self.status  # always the logical value
+            tracking_info['old_status'] = (
+                old_custom_status if old_custom_status else old_status_logical
+            )
+            tracking_info['old_status_logical'] = old_status_logical
 
         # Optional fields which can be supplied in a 'move' call
         for field in StockItem.optional_transfer_fields():
@@ -2452,7 +2500,7 @@ class StockItem(
 
             return False
 
-        self.save()
+        self.save(add_note=False)
 
         trigger_event(
             StockEvents.ITEM_QUANTITY_UPDATED, id=self.id, quantity=float(self.quantity)
@@ -2485,8 +2533,15 @@ class StockItem(
         status = kwargs.pop('status', None) or kwargs.pop('status_custom_key', None)
 
         if status and not self.compare_status(status):
+            old_custom_status = self.get_custom_status()
+            old_status_logical = self.status
             self.set_status(status)
-            tracking_info['status'] = status
+            tracking_info['status'] = status  # may be a custom value
+            tracking_info['status_logical'] = self.status  # always the logical value
+            tracking_info['old_status'] = (
+                old_custom_status if old_custom_status else old_status_logical
+            )
+            tracking_info['old_status_logical'] = old_status_logical
 
         if self.updateQuantity(count):
             tracking_info['quantity'] = float(count)
@@ -2548,8 +2603,15 @@ class StockItem(
         status = kwargs.pop('status', None) or kwargs.pop('status_custom_key', None)
 
         if status and not self.compare_status(status):
+            old_custom_status = self.get_custom_status()
+            old_status_logical = self.status
             self.set_status(status)
-            tracking_info['status'] = status
+            tracking_info['status'] = status  # may be a custom value
+            tracking_info['status_logical'] = self.status  # always the logical value
+            tracking_info['old_status'] = (
+                old_custom_status if old_custom_status else old_status_logical
+            )
+            tracking_info['old_status_logical'] = old_status_logical
 
         if self.updateQuantity(self.quantity + quantity):
             tracking_info['added'] = float(quantity)
@@ -2602,8 +2664,15 @@ class StockItem(
         status = kwargs.pop('status', None) or kwargs.pop('status_custom_key', None)
 
         if status and not self.compare_status(status):
+            old_custom_status = self.get_custom_status()
+            old_status_logical = self.status
             self.set_status(status)
-            deltas['status'] = status
+            deltas['status'] = status  # may be a custom value
+            deltas['status_logical'] = self.status  # always the logical value
+            deltas['old_status'] = (
+                old_custom_status if old_custom_status else old_status_logical
+            )
+            deltas['old_status_logical'] = old_status_logical
 
         if self.updateQuantity(self.quantity - quantity):
             deltas['removed'] = float(quantity)
@@ -2813,21 +2882,18 @@ def after_save_stock_item(sender, instance: StockItem, created, **kwargs):
 class StockItemTracking(InvenTree.models.InvenTreeModel):
     """Stock tracking entry - used for tracking history of a particular StockItem.
 
-    Note: 2021-05-11
-    The legacy StockTrackingItem model contained very little information about the "history" of the item.
-    In fact, only the "quantity" of the item was recorded at each interaction.
-    Also, the "title" was translated at time of generation, and thus was not really translatable.
-    The "new" system tracks all 'delta' changes to the model,
-    and tracks change "type" which can then later be translated
-
-
     Attributes:
         item: ForeignKey reference to a particular StockItem
+        part: ForeignKey reference to the Part associated with this StockItem
         date: Date that this tracking info was created
         tracking_type: The type of tracking information
         notes: Associated notes (input by user)
         user: The user associated with this tracking info
         deltas: The changes associated with this history item
+
+    Notes:
+        If the underlying stock item is deleted, the "item" field will be set to null, but the tracking information will be retained.
+        The tracking data will be removed if the associated part is deleted, as the tracking information is not relevant without the part context.
     """
 
     class Meta:
@@ -2839,6 +2905,13 @@ class StockItemTracking(InvenTree.models.InvenTreeModel):
     def get_api_url():
         """Return API url."""
         return reverse('api-stock-tracking-list')
+
+    def save(self, *args, **kwargs):
+        """Ensure that the 'part' link is always correct."""
+        if self.item:
+            self.part = self.item.part
+
+        super().save(*args, **kwargs)
 
     def get_absolute_url(self):
         """Return url for instance."""
@@ -2854,7 +2927,19 @@ class StockItemTracking(InvenTree.models.InvenTreeModel):
     tracking_type = models.IntegerField(default=StockHistoryCode.LEGACY)
 
     item = models.ForeignKey(
-        StockItem, on_delete=models.CASCADE, related_name='tracking_info'
+        StockItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=False,
+        related_name='tracking_info',
+    )
+
+    part = models.ForeignKey(
+        'part.part',
+        on_delete=models.CASCADE,
+        related_name='stock_tracking_info',
+        null=True,
+        blank=True,
     )
 
     date = models.DateTimeField(auto_now_add=True, editable=False)
